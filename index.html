@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel to JSON</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
+</head>
+<body>
+    <input type="file" id="input" />
+    <button id="search-btn">Search</button>
+
+    <script>
+        function make_function_call(item, callback) {
+            const url = `https://api.lib.harvard.edu/v2/items?identifier=${item}`;
+            fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/xml'
+                }
+            })
+          .then(response => {
+                if (response.ok) {
+                    return response.text();
+                } else{
+                    console.log("no");
+                }
+            })
+          .then(xml => {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xml, "application/xml");
+                const json = xmlToJson(xmlDoc);
+                callback(json);
+            })
+          .catch(error => {
+                console.error(error);
+                callback(null);
+            });
+        
+            
+        }
+        function xmlToJson(xml) {
+            const json = {};
+            if (xml.nodeType === 1) { // element
+                if (xml.attributes.length > 0) {
+                    json["@attributes"] = {};
+                    for (let j = 0; j < xml.attributes.length; j++) {
+                        json["@attributes"][xml.attributes[j].nodeName] = xml.attributes[j].nodeValue;
+                    }
+                }
+            } else if (xml.nodeType === 3) { // text
+                json = xml.nodeValue;
+            }
+    
+            if (xml.hasChildNodes()) {
+                for (let i = 0; i < xml.childNodes.length; i++) {
+                    const item = xmlToJson(xml.childNodes[i]);
+                    const nodeName = xml.childNodes[i].nodeName;
+                    if (typeof json[nodeName] == "undefined") {
+                        json[nodeName] = item;
+                    } else {
+                        if (typeof json[nodeName].push == "undefined") {
+                            json[nodeName] = [json[nodeName]];
+                        }
+                        json[nodeName].push(item);
+                    }
+                }
+            }
+            return json;
+        }
+        
+        const searchBtn = document.getElementById('search-btn');
+        const input = document.getElementById('input');
+
+        searchBtn.addEventListener('click', () => {
+            const file = input.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+
+                const json = XLSX.utils.sheet_to_json(worksheet);
+                console.log(json);
+
+                for (var i = 0; i < json.length; i++) {
+                    var isbn = json[i]["ISBN"];
+                    var title = json[i]["Title"]
+
+                    var search_terms = [isbn, title];
+
+                    for (var j = 0; j < search_terms.length; j++) {
+                        console.log(search_terms[j]);
+
+                        make_function_call(search_terms[j], function(results) {
+                            console.log("RESULTS");
+                            console.log(results);
+                            if (results) {
+                                console.log("RESULTS: ");
+                                console.log(results);
+                                for (var check in results) {
+                                    var check_i = check['isbn'];
+                                    var check_b = check['title'];
+                                    if (isbn!= check_i || title!= check_b) {
+                                        console.log("FOUND");
+                                        console.log(check);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+    </script>
+</body>
+</html>
